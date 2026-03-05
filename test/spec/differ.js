@@ -1,57 +1,32 @@
 'use strict';
 
-var TestHelper = require('bpmn-js/test/TestHelper');
-
-
-var _ = require('lodash');
-
 var fs = require('fs');
-
-
+var expect = require('chai').expect;
 var BpmnModdle = require('bpmn-moddle');
-
-var Differ = require('../../lib/differ'),
-    SimpleChangeHandler = require('../../lib/change-handler');
-
-
-TestHelper.insertCSS('diff.css', fs.readFileSync('assets/diff.css', 'utf-8'));
+var Differ = require('../../lib/differ');
+var SimpleChangeHandler = require('../../lib/change-handler');
 
 
-function importDiagrams(a, b, done) {
+async function importDiagrams(a, b) {
+  var moddle = new BpmnModdle();
 
-  new BpmnModdle().fromXML(a, function(err, adefs) {
+  const adefs = (await moddle.fromXML(a)).rootElement;
+  const bdefs = (await moddle.fromXML(b)).rootElement;
 
-    if (err) {
-      return done(err);
-    }
-
-    new BpmnModdle().fromXML(b, function(err, bdefs) {
-      if (err) {
-        return done(err);
-      } else {
-        return done(null, adefs, bdefs);
-      }
-    });
-  });
+  return { adefs, bdefs, aDefinitions: adefs, bDefinitions: bdefs };
 }
 
 
-function diff(a, b, done) {
+async function diff(a, b) {
+  const { adefs, bdefs } = await importDiagrams(a, b);
 
-  importDiagrams(a, b, function(err, adefs, bdefs) {
-    if (err) {
-      return done(err);
-    }
+  // given
+  var handler = new SimpleChangeHandler();
 
-    // given
-    var handler = new SimpleChangeHandler();
+  // when
+  new Differ().diff(adefs, bdefs, handler);
 
-    // when
-    new Differ().diff(adefs, bdefs, handler);
-
-    done(err, handler, adefs, bdefs);
-  });
-
+  return { results: handler, aDefinitions: adefs, bDefinitions: bdefs };
 }
 
 
@@ -59,104 +34,71 @@ describe('diffing', function() {
 
   describe('diff', function() {
 
-    it('should discover add', function(done) {
+    it('should discover add', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/add/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/add/after.bpmn', 'utf-8');
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
-
-
-        // then
-        expect(results._added).to.have.keys([ 'EndEvent_1', 'SequenceFlow_2' ]);
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.eql({});
-        expect(results._changed).to.eql({});
-
-        done();
-      });
-
+      // then
+      expect(results._added).to.have.keys([ 'EndEvent_1', 'SequenceFlow_2' ]);
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.eql({});
+      expect(results._changed).to.eql({});
     });
 
 
-    it('should discover remove', function(done) {
+    it('should discover remove', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/remove/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/remove/after.bpmn', 'utf-8');
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
-
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
-        expect(results._layoutChanged).to.eql({});
-        expect(results._changed).to.eql({});
-
-        done();
-      });
-
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
+      expect(results._layoutChanged).to.eql({});
+      expect(results._changed).to.eql({});
     });
 
 
-    it('should discover change', function(done) {
+    it('should discover change', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/change/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/change/after.bpmn', 'utf-8');
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.eql({});
+      expect(results._changed).to.have.keys([ 'Task_1'  ]);
 
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.eql({});
-        expect(results._changed).to.have.keys([ 'Task_1'  ]);
-
-        expect(results._changed['Task_1'].attrs).to.deep.eql({
-          name: { oldValue: undefined, newValue: 'TASK'}
-        });
-
-        done();
+      expect(results._changed['Task_1'].attrs).to.deep.eql({
+        name: { oldValue: undefined, newValue: 'TASK'}
       });
-
     });
 
 
-    it('should discover layout-change', function(done) {
+    it('should discover layout-change', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/layout-change/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/layout-change/after.bpmn', 'utf-8');
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
-
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
-        expect(results._changed).to.eql({});
-
-        done();
-      });
-
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
+      expect(results._changed).to.eql({});
     });
 
   });
@@ -164,57 +106,41 @@ describe('diffing', function() {
 
   describe('api', function() {
 
-    it('should diff with default handler', function(done) {
+    it('should diff with default handler', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/layout-change/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/layout-change/after.bpmn', 'utf-8');
 
       // when
-      importDiagrams(aDiagram, bDiagram, function(err, aDefinitions, bDefinitions) {
+      const { aDefinitions, bDefinitions } = await importDiagrams(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
+      // when
+      var results = new Differ().diff(aDefinitions, bDefinitions);
 
-        // when
-        var results = new Differ().diff(aDefinitions, bDefinitions);
-
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
-        expect(results._changed).to.eql({});
-
-        done();
-      });
-
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
+      expect(results._changed).to.eql({});
     });
 
 
-    it('should diff via static diff', function(done) {
+    it('should diff via static diff', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/layout-change/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/layout-change/after.bpmn', 'utf-8');
 
       // when
-      importDiagrams(aDiagram, bDiagram, function(err, aDefinitions, bDefinitions) {
+      const { aDefinitions, bDefinitions } = await importDiagrams(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
+      // when
+      var results = Differ.diff(aDefinitions, bDefinitions);
 
-        // when
-        var results = Differ.diff(aDefinitions, bDefinitions);
-
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
-        expect(results._changed).to.eql({});
-
-        done();
-      });
-
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.have.keys([ 'Task_1', 'SequenceFlow_1' ]);
+      expect(results._changed).to.eql({});
     });
 
   });
@@ -223,85 +149,64 @@ describe('diffing', function() {
   describe('scenarios', function() {
 
 
-    it('should diff collaboration pools / lanes', function(done) {
+    it('should diff collaboration pools / lanes', async function() {
 
       var aDiagram = fs.readFileSync('test/fixtures/collaboration/before.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('test/fixtures/collaboration/after.bpmn', 'utf-8');
 
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
-
-        // then
-        expect(results._added).to.have.keys([ 'Participant_2' ]);
-        expect(results._removed).to.have.keys([ 'Participant_1', 'Lane_1' ]);
-        expect(results._layoutChanged).to.have.keys([ '_Participant_2', 'Lane_2' ]);
-        expect(results._changed).to.have.keys([ 'Lane_2' ]);
-
-        done();
-      });
+      // then
+      expect(results._added).to.have.keys([ 'Participant_2' ]);
+      expect(results._removed).to.have.keys([ 'Participant_1', 'Lane_1' ]);
+      expect(results._layoutChanged).to.have.keys([ '_Participant_2', 'Lane_2' ]);
+      expect(results._changed).to.have.keys([ 'Lane_2' ]);
     });
 
 
-    it('should diff pizza collaboration StartEvent move', function(done) {
+    it('should diff pizza collaboration StartEvent move', async function() {
 
       var aDiagram = fs.readFileSync('resources/pizza-collaboration/start-event-old.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('resources/pizza-collaboration/start-event-new.bpmn', 'utf-8');
 
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
-
-        // then
-        expect(results._added).to.eql({});
-        expect(results._removed).to.eql({});
-        expect(results._layoutChanged).to.have.keys([ '_6-61' ]);
-        expect(results._changed).to.eql({});
-
-        done();
-      });
+      // then
+      expect(results._added).to.eql({});
+      expect(results._removed).to.eql({});
+      expect(results._layoutChanged).to.have.keys([ '_6-61' ]);
+      expect(results._changed).to.eql({});
     });
 
 
-    it('should diff pizza collaboration', function(done) {
+    it('should diff pizza collaboration', async function() {
 
       var aDiagram = fs.readFileSync('resources/pizza-collaboration/old.bpmn', 'utf-8');
       var bDiagram = fs.readFileSync('resources/pizza-collaboration/new.bpmn', 'utf-8');
 
 
       // when
-      diff(aDiagram, bDiagram, function(err, results, aDefinitions, bDefinitions) {
+      const { results } = await diff(aDiagram, bDiagram);
 
-        if (err) {
-          return done(err);
-        }
+      // then
+      expect(results._added).to.have.keys([
+        'ManualTask_1',
+        'ExclusiveGateway_1'
+      ]);
 
-        // then
-        expect(results._added).to.have.keys([
-          'ManualTask_1',
-          'ExclusiveGateway_1'
-        ]);
+      expect(results._removed).to.have.keys([
+        '_6-674', '_6-691', '_6-746', '_6-748', '_6-74', '_6-125', '_6-178', '_6-642'
+      ]);
 
-        expect(results._removed).to.have.keys([
-          '_6-674', '_6-691', '_6-746', '_6-748', '_6-74', '_6-125', '_6-178', '_6-642'
-        ]);
+      expect(results._layoutChanged).to.have.keys([
+        '_6-61'
+      ]);
 
-        expect(results._layoutChanged).to.have.keys([
-          '_6-61'
-        ]);
-
-        expect(results._changed).to.have.keys([ '_6-127' ]);
-
-        done();
-      });
+      expect(results._changed).to.have.keys([ '_6-127' ]);
     });
 
   });
